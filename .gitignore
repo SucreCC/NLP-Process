@@ -211,3 +211,4 @@ cython_debug/
 !/others/pretrain-model/bert-base-chinese/vocab.txt
 /others/pretrain-model/bert-base-chinese/*.bin
 /BERT-Chinese-Classification/wandb/
+/public/wandb/
