@@ -9,8 +9,8 @@ from utils import build_dataset, build_iterator, get_time_dif
 if __name__ == '__main__':
     dataset = '..'
     model_name = 'bert'
-    x = import_module(model_name)
-    config = x.Config(dataset)
+    bert_model = import_module(model_name)
+    config = bert_model.Config(dataset)
 
     np.random.seed(1)
     torch.manual_seed(1)
@@ -27,5 +27,5 @@ if __name__ == '__main__':
     print("Time usage:", time_dif)
 
     #  train
-    model = x.Model(config).to(config.device)
+    model = bert_model.Model(config).to(config.device)
     train(config, model, train_iter, dev_iter, test_iter)
