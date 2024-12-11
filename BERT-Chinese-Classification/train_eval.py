@@ -93,7 +93,7 @@ def train(config, model, train_iter, dev_iter, test_iter):
 
 
 def test(config, model, test_iter):
-    model.load_state_dict(torch.load(config.save_path))
+    model.load_state_dict(torch.load(config.save_path, weights_only=True))
     model.eval()
     start_time = time.time()
     test_acc, test_loss, test_report, test_confusion = evaluate(config, model, test_iter, test=True)
