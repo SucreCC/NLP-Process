@@ -214,3 +214,4 @@ cython_debug/
 /BERT-Chinese-Classification/wandb/
 /public/wandb/
 /public/logs/
+*.ckpt
