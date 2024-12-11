@@ -102,6 +102,100 @@ def init_network(model, method='xavier', exclude='embedding', seed=123):
 #     test(config, model, test_iter)
 
 
+
+
+
+
+
+# 优化后的代码
+def train(config, model, train_iter, dev_iter, test_iter):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model.to(device)  # 确保模型在正确的设备上
+    model.train()  # 调整为只在外层调用一次
+
+    start_time = time.time()
+    param_optimizer = list(model.named_parameters())
+    no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+    optimizer_grouped_parameters = [
+        {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
+        {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+    ]
+    optimizer = AdamW(optimizer_grouped_parameters, lr=config.learning_rate)
+
+    total_steps = len(train_iter) * config.num_epochs
+    warmup_ratio = 0.05
+    warmup_steps = int(total_steps * warmup_ratio)
+
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer,
+        num_warmup_steps=warmup_steps,
+        num_training_steps=total_steps
+    )
+
+    total_batch = 0
+    dev_best_loss = float('inf')
+    accumulate_steps = 4  # 梯度累积的步数
+
+    for epoch in range(config.num_epochs):
+        print('Epoch [{}/{}]'.format(epoch + 1, config.num_epochs))
+        optimizer.zero_grad()
+
+        for i, (trains, labels) in enumerate(train_iter):
+            # 确保训练数据和标签在正确的设备上
+            # trains, labels = trains.to(device), labels.to(device)
+
+            outputs = model(trains)
+            time.sleep(0.15)  # time sleep, 减小由GPU利用率过高造成的显示器黑屏问题
+
+            loss = F.cross_entropy(outputs, labels) / accumulate_steps  # 累积梯度分摊损失
+            loss.backward()
+
+            if (i + 1) % accumulate_steps == 0 or (i + 1) == len(train_iter):
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  # 梯度裁剪
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad()
+
+            if total_batch % 500 == 0:
+                true = labels.data.cpu()
+                predic = torch.max(outputs.data, 1)[1].cpu()
+                train_acc = metrics.accuracy_score(true, predic)
+                dev_acc, dev_loss = evaluate(config, model, dev_iter)
+
+                if dev_loss < dev_best_loss:
+                    dev_best_loss = dev_loss
+                    torch.save(model.state_dict(), config.save_path)
+                    improve = '*'
+                else:
+                    improve = ''
+
+                time_dif = get_time_dif(start_time)
+                msg = 'Iter: {0:>6}, Train Loss: {1:>5.2f}, Train Acc: {2:>6.2%}, Val Loss: {3:>5.2f}, Val Acc: {4:>6.2%}, Time: {5}, {6}'
+                print(
+                    msg.format(total_batch, loss.item() * accumulate_steps, train_acc, dev_loss, dev_acc, time_dif, improve))
+            total_batch += 1
+
+    test(config, model, test_iter)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # 使用 torch.cuda.memory_summary(device=config.device) 打印输入太多，不好观察
 # 以下是观察结果
 # 观察与分析
@@ -315,96 +409,100 @@ def init_network(model, method='xavier', exclude='embedding', seed=123):
 
 
 
+
 # use GPU monitor to get GPU information for special step
 # compute loss he backward 这两步对gpu的利用率和gpu内存的占用率不高
-def train(config, model, train_iter, dev_iter, test_iter):
-    # 引入 GPU Monitor 用来监控GPU的使用情况
-    monitor = GPUMonitor(log_dir="./save/logs/GPU-monitor")
 
-    model.train()  # 调整为只在外层调用一次
-    start_time = time.time()
+# def train(config, model, train_iter, dev_iter, test_iter):
+#     # 引入 GPU Monitor 用来监控GPU的使用情况
+#     monitor = GPUMonitor(log_dir="./save/logs/GPU-monitor")
+#
+#     model.train()  # 调整为只在外层调用一次
+#     start_time = time.time()
+#
+#     param_optimizer = list(model.named_parameters())
+#     no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+#     optimizer_grouped_parameters = [
+#         {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
+#         {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}  # 无衰减
+#     ]
+#     optimizer = AdamW(optimizer_grouped_parameters, lr=config.learning_rate)
+#
+#     total_steps = len(train_iter) * config.num_epochs  # 修正以确保步数与数据集和批次大小一致
+#     warmup_ratio = 0.05
+#     warmup_steps = int(total_steps * warmup_ratio)
+#
+#     scheduler = get_linear_schedule_with_warmup(
+#         optimizer,
+#         num_warmup_steps=warmup_steps,
+#         num_training_steps=total_steps
+#     )
+#
+#     total_batch = 0
+#     dev_best_loss = float('inf')
+#     accumulate_steps = 4  # 梯度累积的步数
+#
+#     for epoch in range(config.num_epochs):
+#         print('Epoch [{}/{}]'.format(epoch + 1, config.num_epochs))
+#         optimizer.zero_grad()  # 初始化梯度
+#
+#         for i, (trains, labels) in enumerate(train_iter):
+#
+#             # 启动监控任务
+#             monitor.start_monitoring(task_name="Model training step", interval=0.1)
+#             outputs = model(trains)
+#             # 停止监控任务
+#             monitor.stop_monitoring()
+#
+#             time.sleep(0.15)  # time sleep, 减小由gpu利用率 （>90%）过高造成的显示器黑屏的问题
+#
+#             # 启动监控任务
+#             # monitor.start_monitoring(task_name="Compute loss step", interval=0.1)
+#             loss = F.cross_entropy(outputs, labels) / accumulate_steps  # 累积梯度分摊损失
+#             # 停止监控任务
+#             # monitor.stop_monitoring()
+#
+#             # 启动监控任务
+#             # monitor.start_monitoring(task_name="Backward step", interval=0.1)
+#             loss.backward()
+#             # 停止监控任务
+#             # monitor.stop_monitoring()
+#
+#             if (i + 1) % accumulate_steps == 0 or (i + 1) == len(train_iter):
+#                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  # 梯度裁剪
+#                 optimizer.step()
+#                 scheduler.step()
+#                 optimizer.zero_grad()  # 重置梯度
+#
+#             if total_batch % 500 == 0:
+#                 true = labels.data.cpu()
+#                 predic = torch.max(outputs.data, 1)[1].cpu()
+#
+#                 # 启动监控任务
+#                 monitor.start_monitoring(task_name="calculate accuracy for each 500 step", interval=0.1)
+#                 train_acc = metrics.accuracy_score(true, predic)
+#                 dev_acc, dev_loss = evaluate(config, model, dev_iter)
+#                 # 停止监控任务
+#                 monitor.stop_monitoring()
+#
+#                 if dev_loss < dev_best_loss:
+#                     dev_best_loss = dev_loss
+#                     torch.save(model.state_dict(), config.save_path)
+#                     improve = '*'
+#                     last_improve = total_batch
+#                 else:
+#                     improve = ''
+#
+#                 time_dif = get_time_dif(start_time)
+#                 msg = 'Iter: {0:>6}, Train Loss: {1:>5.2f}, Train Acc: {2:>6.2%}, Val Loss: {3:>5.2f}, Val Acc: {4:>6.2%}, Time: {5}, {6}'
+#                 print(
+#                     msg.format(total_batch, loss.item() * accumulate_steps, train_acc, dev_loss, dev_acc, time_dif,
+#                                improve))
+#             total_batch += 1
+#
+#     test(config, model, test_iter)
 
-    param_optimizer = list(model.named_parameters())
-    no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
-    optimizer_grouped_parameters = [
-        {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-        {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}  # 无衰减
-    ]
-    optimizer = AdamW(optimizer_grouped_parameters, lr=config.learning_rate)
 
-    total_steps = len(train_iter) * config.num_epochs  # 修正以确保步数与数据集和批次大小一致
-    warmup_ratio = 0.05
-    warmup_steps = int(total_steps * warmup_ratio)
-
-    scheduler = get_linear_schedule_with_warmup(
-        optimizer,
-        num_warmup_steps=warmup_steps,
-        num_training_steps=total_steps
-    )
-
-    total_batch = 0
-    dev_best_loss = float('inf')
-    accumulate_steps = 4  # 梯度累积的步数
-
-    for epoch in range(config.num_epochs):
-        print('Epoch [{}/{}]'.format(epoch + 1, config.num_epochs))
-        optimizer.zero_grad()  # 初始化梯度
-
-        for i, (trains, labels) in enumerate(train_iter):
-
-            # 启动监控任务
-            monitor.start_monitoring(task_name="Model training step", interval=0.1)
-            outputs = model(trains)
-            # 停止监控任务
-            monitor.stop_monitoring()
-
-            time.sleep(0.15)  # time sleep, 减小由gpu利用率 （>90%）过高造成的显示器黑屏的问题
-
-            # 启动监控任务
-            # monitor.start_monitoring(task_name="Compute loss step", interval=0.1)
-            loss = F.cross_entropy(outputs, labels) / accumulate_steps  # 累积梯度分摊损失
-            # 停止监控任务
-            # monitor.stop_monitoring()
-
-            # 启动监控任务
-            # monitor.start_monitoring(task_name="Backward step", interval=0.1)
-            loss.backward()
-            # 停止监控任务
-            # monitor.stop_monitoring()
-
-            if (i + 1) % accumulate_steps == 0 or (i + 1) == len(train_iter):
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  # 梯度裁剪
-                optimizer.step()
-                scheduler.step()
-                optimizer.zero_grad()  # 重置梯度
-
-            if total_batch % 500 == 0:
-                true = labels.data.cpu()
-                predic = torch.max(outputs.data, 1)[1].cpu()
-
-                # 启动监控任务
-                monitor.start_monitoring(task_name="calculate accuracy for each 500 step", interval=0.1)
-                train_acc = metrics.accuracy_score(true, predic)
-                dev_acc, dev_loss = evaluate(config, model, dev_iter)
-                # 停止监控任务
-                monitor.stop_monitoring()
-
-                if dev_loss < dev_best_loss:
-                    dev_best_loss = dev_loss
-                    torch.save(model.state_dict(), config.save_path)
-                    improve = '*'
-                    last_improve = total_batch
-                else:
-                    improve = ''
-
-                time_dif = get_time_dif(start_time)
-                msg = 'Iter: {0:>6}, Train Loss: {1:>5.2f}, Train Acc: {2:>6.2%}, Val Loss: {3:>5.2f}, Val Acc: {4:>6.2%}, Time: {5}, {6}'
-                print(
-                    msg.format(total_batch, loss.item() * accumulate_steps, train_acc, dev_loss, dev_acc, time_dif,
-                               improve))
-            total_batch += 1
-
-    test(config, model, test_iter)
 
 
 def test(config, model, test_iter):
@@ -422,6 +520,8 @@ def test(config, model, test_iter):
     print("Time usage:", time_dif)
 
 
+
+# 优化前的代码
 def evaluate(config, model, data_iter, test=False):
     model.eval()
     loss_total = 0
@@ -444,29 +544,3 @@ def evaluate(config, model, data_iter, test=False):
         return acc, loss_total / len(data_iter), report, confusion
     return acc, loss_total / len(data_iter)
 
-# def evaluate(config, model, data_iter, test=False):
-#     model.eval()
-#     loss_total = 0
-#     predict_all = np.array([], dtype=int)
-#     label_all = np.array([], dtype=int)
-#
-#     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-#     model = model.to(device)  # 将模型移动到 GPU
-#
-#     with torch.no_grad():
-#         for texts, labels in data_iter:
-#             texts, labels = texts.to(device), labels.to(device)  # 将数据移动到 GPU
-#             outputs = model(texts)
-#             loss = F.cross_entropy(outputs, labels)
-#             loss_total += loss.item()  # 将 loss 转为标量
-#             labels = labels.cpu().numpy()  # 将 labels 移回 CPU
-#             predic = torch.max(outputs.data, 1)[1].cpu().numpy()  # 将预测结果移回 CPU
-#             label_all = np.append(label_all, labels)
-#             predict_all = np.append(predict_all, predic)
-#
-#     acc = metrics.accuracy_score(label_all, predict_all)
-#     if test:
-#         report = metrics.classification_report(label_all, predict_all, target_names=config.class_list, digits=4)
-#         confusion = metrics.confusion_matrix(label_all, predict_all)
-#         return acc, loss_total / len(data_iter), report, confusion
-#     return acc, loss_total / len(data_iter)
