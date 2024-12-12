@@ -145,7 +145,7 @@ def train(config, model, train_iter, dev_iter, test_iter):
             # trains, labels = trains.to(device), labels.to(device)
 
             outputs = model(trains)
-            time.sleep(0.15)  # time sleep, 减小由GPU利用率过高造成的显示器黑屏问题
+            time.sleep(0.1)  # time sleep, 减小由GPU利用率过高造成的显示器黑屏问题
 
             loss = F.cross_entropy(outputs, labels) / accumulate_steps  # 累积梯度分摊损失
             loss.backward()
@@ -522,25 +522,62 @@ def test(config, model, test_iter):
 
 
 # 优化前的代码
+# def evaluate(config, model, data_iter, test=False):
+#     model.eval()
+#     loss_total = 0
+#     predict_all = np.array([], dtype=int)
+#     label_all = np.array([], dtype=int)
+#     with torch.no_grad():
+#         for texts, labels in data_iter:
+#             outputs = model(texts)
+#             loss = F.cross_entropy(outputs, labels)
+#             loss_total += loss
+#             labels = labels.data.cpu().numpy()
+#             predic = torch.max(outputs.data, 1)[1].cpu().numpy()
+#             label_all = np.append(label_all, labels)
+#             predict_all = np.append(predict_all, predic)
+#
+#     acc = metrics.accuracy_score(label_all, predict_all)
+#     if test:
+#         report = metrics.classification_report(label_all, predict_all, target_names=config.class_list, digits=4)
+#         confusion = metrics.confusion_matrix(label_all, predict_all)
+#         return acc, loss_total / len(data_iter), report, confusion
+#     return acc, loss_total / len(data_iter)
+
+
 def evaluate(config, model, data_iter, test=False):
     model.eval()
     loss_total = 0
-    predict_all = np.array([], dtype=int)
-    label_all = np.array([], dtype=int)
+    predict_all = []
+    label_all = []
     with torch.no_grad():
         for texts, labels in data_iter:
+            # # 如果 texts 和 labels 不是张量，先转换为张量
+            # if not isinstance(texts, torch.Tensor):
+            #     texts = torch.tensor(texts, dtype=torch.float32)
+            # if not isinstance(labels, torch.Tensor):
+
+            #     labels = torch.tensor(labels, dtype=torch.long)
+            #
+            # # 将张量移动到指定设备（如 GPU）
+            # texts, labels = texts.to(config.device), labels.to(config.device)
+
             outputs = model(texts)
             loss = F.cross_entropy(outputs, labels)
-            loss_total += loss
-            labels = labels.data.cpu().numpy()
-            predic = torch.max(outputs.data, 1)[1].cpu().numpy()
-            label_all = np.append(label_all, labels)
-            predict_all = np.append(predict_all, predic)
+            loss_total += loss.item()
+            predic = torch.max(outputs, 1)[1]
+            predict_all.append(predic)
+            label_all.append(labels)
+
+    # 在 GPU 上拼接结果，并在最后转为 NumPy 数组
+    predict_all = torch.cat(predict_all).cpu().numpy()
+    label_all = torch.cat(label_all).cpu().numpy()
 
     acc = metrics.accuracy_score(label_all, predict_all)
+
     if test:
         report = metrics.classification_report(label_all, predict_all, target_names=config.class_list, digits=4)
         confusion = metrics.confusion_matrix(label_all, predict_all)
         return acc, loss_total / len(data_iter), report, confusion
-    return acc, loss_total / len(data_iter)
 
+    return acc, loss_total / len(data_iter)
