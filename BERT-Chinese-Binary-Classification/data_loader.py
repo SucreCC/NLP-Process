@@ -64,12 +64,12 @@ class DataIterator(object):
         self.index = 0
         self.device = device
 
-    def _to_tensor(self, contents, labels, masks, seq_lens):
-        x = torch.LongTensor(contents).to(self.device)
-        y = torch.LongTensor(labels).to(self.device)
-        mask = torch.LongTensor(masks).to(self.device)
-        seq_len = torch.LongTensor(seq_lens).to(self.device)
-        return x, y, mask, seq_len
+    def _to_tensor(self, batches):
+        x = torch.LongTensor([batch[0] for batch in batches]).to(self.device)
+        y = torch.LongTensor([batch[1] for batch in batches]).to(self.device)
+        attention_masks = torch.LongTensor([batch[2] for batch in batches]).to(self.device)
+        seq_len = torch.LongTensor([batch[3] for batch in batches]).to(self.device)
+        return x, y, attention_masks, seq_len
 
     def __next__(self):
         if self.residue and self.index < self.n_batches:
@@ -96,8 +96,21 @@ class DataIterator(object):
             return int(self.n_batches)
 
 
+def buildIterator(dataset, config):
+    return DataIterator(dataset, config.batch_size, config.device)
+
+
+def get_time_dif(start_time):
+    end_time = time.time()
+    time_dif = end_time - start_time
+    return timedelta(seconds=int(round(time_dif)))
+
+
 import model_config
 
 model_config = model_config.ModelConfig()
 batches = load_dataset(model_config.file_path, model_config.max_len, model_config.tokenizer)
+iter = buildIterator(batches, model_config)
+next = iter.__next__()
+
 print(batches)
