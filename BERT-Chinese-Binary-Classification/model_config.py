@@ -8,7 +8,9 @@ class ModelConfig(object):
         self.file_path = '../others/data/binary-classification/waimai-10k/waimai_10k.csv'
         self.test_file_path = '../others/data/binary-classification/waimai-10k/test.csv'
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.num_classes = 2
+
+        # 二分类，采用sigmoid函数，即最后一层只有1个网络节点
+        self.num_classes = 1
         self.num_epochs = 3
         self.batch_size = 128
         self.max_len = 32

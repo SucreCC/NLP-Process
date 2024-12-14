@@ -1,5 +1,5 @@
+import numpy as np
 import torch
-from openai import batches
 from tqdm import tqdm
 import time
 from datetime import timedelta
@@ -20,36 +20,69 @@ def get_balance_corpus(corpus):
     return balanced_corpus
 
 
-def load_dataset(file_path, max_len, tokenizer):
-    CLS_ids = tokenizer.convert_tokens_to_ids(CLS)
+# def load_dataset(file_path, max_len, tokenizer):
+#     CLS_ids = tokenizer.convert_tokens_to_ids(CLS)
+#
+#     corpus = pd.read_csv(file_path)
+#     balanced_corpus = get_balance_corpus(corpus)
+#     labels = [int(label) for label in balanced_corpus['label'].tolist()]
+#     inputs = balanced_corpus['review'].tolist()
+#     attention_masks = []
+#     seq_lens = []
+#     input_ids_list = []
+#
+#     for input in tqdm(inputs):
+#         # add_special_tokens 在句首和句尾添加CLS 和 SEP 的id
+#         encoding = tokenizer(input, add_special_tokens=False)
+#         input_ids = [CLS_ids] + encoding['input_ids']
+#         input_ids_len = len(input_ids)
+#
+#         if input_ids_len < max_len:
+#             attention_mask = [1] * input_ids_len + [0] * (max_len - input_ids_len)
+#             input_ids += [0] * (max_len - input_ids_len)
+#         else:
+#             attention_mask = [1] * max_len
+#             input_ids = input_ids[:max_len]
+#             input_ids_len = max_len
+#
+#         input_ids_list.append(input_ids)
+#         attention_masks.append(attention_mask)
+#         seq_lens.append(input_ids_len)
+#     seq_lens = np.array(seq_lens).reshape(-1, 1).tolist()
+#     batches = [(input_ids_list, labels, attention_masks, seq_lens)]
+#     return batches
 
+
+def load_dataset(file_path, max_len, tokenizer):
+    CLS_ids = tokenizer.convert_tokens_to_ids('[CLS]')  # 改为标准 BERT CLS 标记
+    contents = []
+
+    # 读取数据
     corpus = pd.read_csv(file_path)
     balanced_corpus = get_balance_corpus(corpus)
     labels = [int(label) for label in balanced_corpus['label'].tolist()]
     inputs = balanced_corpus['review'].tolist()
-    attention_masks = []
-    seq_lens = []
-    input_ids_list = []
 
-    for input in tqdm(inputs):
-        # add_special_tokens 在句首和句尾添加CLS 和 SEP 的id
-        encoding = tokenizer(input, add_special_tokens=False)
+    for input_text, label in tqdm(zip(inputs, labels), total=len(labels)):
+        # 分词
+        encoding = tokenizer(input_text, add_special_tokens=False)
         input_ids = [CLS_ids] + encoding['input_ids']
         input_ids_len = len(input_ids)
 
+        # 截断或填充
         if input_ids_len < max_len:
             attention_mask = [1] * input_ids_len + [0] * (max_len - input_ids_len)
             input_ids += [0] * (max_len - input_ids_len)
+            input_ids_len = max_len
         else:
             attention_mask = [1] * max_len
             input_ids = input_ids[:max_len]
             input_ids_len = max_len
 
-        input_ids_list.append(input_ids)
-        attention_masks.append(attention_mask)
-        seq_lens.append(input_ids_len)
-    batches = [(input_ids_list, labels, attention_masks, seq_lens)]
-    return batches
+        # 打包单个样本
+        contents.append((input_ids, label, input_ids_len, attention_mask))
+
+    return contents
 
 
 class DataIterator(object):
@@ -66,10 +99,12 @@ class DataIterator(object):
 
     def _to_tensor(self, batches):
         x = torch.LongTensor([batch[0] for batch in batches]).to(self.device)
-        y = torch.LongTensor([batch[1] for batch in batches]).to(self.device)
+        y = torch.tensor([batch[1] for batch in batches], dtype=torch.float).to(self.device)
+        # 把labels 由1维转换成2维 （batch_size, 1）
+        y = y.view(-1, 1)
         attention_masks = torch.LongTensor([batch[2] for batch in batches]).to(self.device)
         seq_len = torch.LongTensor([batch[3] for batch in batches]).to(self.device)
-        return x, y, attention_masks, seq_len
+        return (x, attention_masks, seq_len), y
 
     def __next__(self):
         if self.residue and self.index < self.n_batches:
@@ -104,13 +139,3 @@ def get_time_dif(start_time):
     end_time = time.time()
     time_dif = end_time - start_time
     return timedelta(seconds=int(round(time_dif)))
-
-
-import model_config
-
-model_config = model_config.ModelConfig()
-batches = load_dataset(model_config.file_path, model_config.max_len, model_config.tokenizer)
-iter = buildIterator(batches, model_config)
-next = iter.__next__()
-
-print(batches)
