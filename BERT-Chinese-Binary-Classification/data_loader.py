@@ -20,39 +20,6 @@ def get_balance_corpus(corpus):
     return balanced_corpus
 
 
-# def load_dataset(file_path, max_len, tokenizer):
-#     CLS_ids = tokenizer.convert_tokens_to_ids(CLS)
-#
-#     corpus = pd.read_csv(file_path)
-#     balanced_corpus = get_balance_corpus(corpus)
-#     labels = [int(label) for label in balanced_corpus['label'].tolist()]
-#     inputs = balanced_corpus['review'].tolist()
-#     attention_masks = []
-#     seq_lens = []
-#     input_ids_list = []
-#
-#     for input in tqdm(inputs):
-#         # add_special_tokens 在句首和句尾添加CLS 和 SEP 的id
-#         encoding = tokenizer(input, add_special_tokens=False)
-#         input_ids = [CLS_ids] + encoding['input_ids']
-#         input_ids_len = len(input_ids)
-#
-#         if input_ids_len < max_len:
-#             attention_mask = [1] * input_ids_len + [0] * (max_len - input_ids_len)
-#             input_ids += [0] * (max_len - input_ids_len)
-#         else:
-#             attention_mask = [1] * max_len
-#             input_ids = input_ids[:max_len]
-#             input_ids_len = max_len
-#
-#         input_ids_list.append(input_ids)
-#         attention_masks.append(attention_mask)
-#         seq_lens.append(input_ids_len)
-#     seq_lens = np.array(seq_lens).reshape(-1, 1).tolist()
-#     batches = [(input_ids_list, labels, attention_masks, seq_lens)]
-#     return batches
-
-
 def load_dataset(file_path, max_len, tokenizer):
     CLS_ids = tokenizer.convert_tokens_to_ids('[CLS]')  # 改为标准 BERT CLS 标记
     contents = []
