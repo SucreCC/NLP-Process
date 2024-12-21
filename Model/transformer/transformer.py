@@ -7,7 +7,13 @@ import torch.nn.functional as F
 import torch.optim as optim
 import matplotlib.pyplot as plt
 
-from Model.BERT.MyBERT import ScaledDotProductAttention
+
+
+def make_batch(sentences):
+    input_batch = [[src_vocab[n] for n in sentences[0].split()]]
+    output_batch = [[tgt_vocab[n] for n in sentences[1].split()]]
+    target_batch = [[tgt_vocab[n] for n in sentences[2].split()]]
+    return torch.LongTensor(input_batch), torch.LongTensor(output_batch), torch.LongTensor(target_batch)
 
 
 def get_sinusoid_encoding_table(n_position, d_model):
@@ -102,8 +108,8 @@ class ScaledDotProductAttention(nn.Module):
 
     def forward(self, Q, K, V, attention_mask=None):
         scores = torch.matmul(Q, K.transpose(-1, -2))
-        if attention_mask is not None:
-            scores.masked_fill_(attention_mask, -np.inf)
+        # if attention_mask is not None:
+        scores.masked_fill_(attention_mask, -np.inf)
         attention = F.softmax(scores, dim=-1)
         context = torch.matmul(attention, V)
         return context, attention
@@ -146,7 +152,7 @@ class MultiHeadAttention(nn.Module):
         residual = Q  # 残差连接，形状为 [batch_size, seq_len, d_model]
 
         # 获取 batch 的大小
-        batch_size = Q.size(0)
+        residual, batch_size = Q, Q.size(0)
 
         # 生成 Query 矩阵，形状从 [batch_size, seq_len, d_model] -> [batch_size, seq_len, n_heads, d_k] -> [batch_size, n_heads, seq_len, d_k]
         q_s = self.W_Q(Q).view(batch_size, -1, n_heads, d_k).transpose(1, 2)
@@ -180,7 +186,7 @@ class PositionwiseFeedForward(nn.Module):
     def __init__(self):
         super(PositionwiseFeedForward, self).__init__()
         self.fc1 = nn.Linear(d_model, d_ff)
-        self.fcw = nn.Linear(d_ff, d_model)
+        self.fc2 = nn.Linear(d_ff, d_model)
         self.layer_norm = nn.LayerNorm(d_model)
 
     def forward(self, inputs):
@@ -197,9 +203,9 @@ class EncoderLayer(nn.Module):
         self.feed_forward = PositionwiseFeedForward()
 
     def forward(self, inputs, enc_self_attn_mask):
-        output, attention = self.multihead_attention(inputs, inputs, inputs, enc_self_attn_mask)
-        output = self.feed_forward(output)
-        return output, attention
+        outputs, attention = self.multihead_attention(inputs, inputs, inputs, enc_self_attn_mask)
+        outputs = self.feed_forward(outputs)
+        return outputs, attention
 
 
 class DecoderLayer(nn.Module):
@@ -209,10 +215,10 @@ class DecoderLayer(nn.Module):
         self.multihead_attention = MultiHeadAttention()
         self.feed_forward = PositionwiseFeedForward()
 
-    def forward(self, dec_inputs, enc_inputs, dec_self_attn_mask, dec_enc_attn_mask):
+    def forward(self, dec_inputs, enc_outputs, dec_self_attn_mask, dec_enc_attn_mask):
         dec_outputs, dec_self_attn = self.masked_multihead_attention(dec_inputs, dec_inputs, dec_inputs,
                                                                      dec_self_attn_mask)
-        dec_outputs, dec_enc_attn = self.multihead_attention(enc_inputs, enc_inputs, dec_outputs, dec_enc_attn_mask)
+        dec_outputs, dec_enc_attn = self.multihead_attention(dec_outputs, enc_outputs, enc_outputs, dec_enc_attn_mask)
         dec_outputs = self.feed_forward(dec_outputs)
         return dec_outputs, dec_self_attn, dec_enc_attn
 
@@ -228,12 +234,64 @@ class Encoder(nn.Module):
     def forward(self, enc_inputs):
         positions = torch.arange(enc_inputs.size(1)).unsqueeze(0)
         enc_outputs = self.src_emb(enc_inputs) + self.pos_emb(positions)
-        enc_self_attn_mask = get_attn_subsequent_mask(enc_inputs, enc_inputs)
-        enc_self_attn = []
+        enc_self_attn_mask = get_attention_pad_mask(enc_inputs, enc_inputs)
+        enc_self_attns = []
         for layer in self.layers:
-            enc_outputs = layer(enc_outputs, enc_self_attn_mask)
-            enc_self_attn.append(enc_outputs)
-        return enc_outputs, enc_self_attn
+            enc_outputs, enc_self_attn = layer(enc_outputs, enc_self_attn_mask)
+            enc_self_attns.append(enc_self_attn)
+        return enc_outputs, enc_self_attns
+
+
+class Decoder(nn.Module):
+    def __init__(self):
+        super(Decoder, self).__init__()
+        self.tgt_emb = nn.Embedding(tgt_vocab_size, d_model)
+        self.pos_emb = nn.Embedding.from_pretrained(get_sinusoid_encoding_table(tgt_len + 1, d_model), freeze=True)
+        self.layers = nn.ModuleList([DecoderLayer() for _ in range(n_layers)])
+
+    def forward(self, dec_inputs, enc_inputs, enc_outputs):
+        positions = torch.arange(dec_inputs.size(1)).unsqueeze(0).repeat(dec_inputs.size(0), 1)
+        dec_outputs = self.tgt_emb(dec_inputs) + self.pos_emb(positions)
+        dec_self_attn_pad_mask = get_attention_pad_mask(dec_inputs, dec_inputs)
+        dec_self_attn_subsequent_mask = get_attn_subsequent_mask(dec_inputs)
+        dec_self_attn_mask = torch.gt((dec_self_attn_pad_mask + dec_self_attn_subsequent_mask).float(), 0)
+
+        dec_enc_attn_mask = get_attention_pad_mask(dec_inputs, enc_inputs)
+        dec_self_attns, dec_enc_attns = [], []
+
+        for layer in self.layers:
+            dec_outputs, dec_self_attn, dec_enc_attn = layer(dec_outputs, enc_outputs, dec_self_attn_mask,
+                                                             dec_enc_attn_mask)
+            dec_self_attns.append(dec_self_attn)
+            dec_enc_attns.append(dec_enc_attn)
+        return dec_outputs, dec_self_attns, dec_enc_attns
+
+
+class Transformer(nn.Module):
+    def __init__(self):
+        super(Transformer, self).__init__()
+        self.encoder = Encoder()
+        self.decoder = Decoder()
+        # 作为 sequence to sequence 的结构， 原序列长度可以和目标序列长度不一样的。如英文的 “diner”， 在中文可以翻译文 “晚餐”。
+        self.projection = nn.Linear(d_model, tgt_vocab_size)
+
+    def forward(self, enc_inputs, dec_inputs):
+        enc_outputs, enc_self_attn = self.encoder(enc_inputs)
+        dec_outputs, dec_self_attn, dec_enc_attn = self.decoder(dec_inputs, enc_inputs, enc_outputs)
+        dec_logits = self.projection(dec_outputs)
+        # 展平张量，将 [batch_size, tgt_seq_len, tgt_vocab_size] 转换为 [batch_size * tgt_seq_len, tgt_vocab_size]
+        return dec_logits.view(-1, dec_logits.size(-1)), enc_self_attn, dec_self_attn, dec_enc_attn
+
+
+def show_graph(attn):
+    attn = attn[-1].squeeze(0)[0]
+    attn = attn.squeeze(0).data.numpy()
+    fig = plt.figure(figsize=(n_heads, n_heads))
+    ax = fig.add_subplot(1, 1, 1)
+    ax.matshow(attn, cmap='viridis')
+    ax.set_xticklabels([''] + sentences[0].split(), fontdict={'fontsize': 14}, rotation=90)
+    ax.set_yticklabels([''] + sentences[2].split(), fontdict={'fontsize': 14})
+    plt.show()
 
 
 if __name__ == '__main__':
@@ -256,3 +314,30 @@ if __name__ == '__main__':
     d_k = d_v = 64  # dimension of K(=Q), V  这里的指的是多头中每个头的维度
     n_layers = 6  # number of Encoder of Decoder Layer
     n_heads = 8  # number of heads in Multi-Head Attention
+
+    model = Transformer()
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    enc_inputs, dec_inputs, target_batch = make_batch(sentences)
+
+    for epoch in range(3):
+        optimizer.zero_grad()
+        outputs, enc_self_attn, dec_self_attn, dec_enc_attn = model(enc_inputs, dec_inputs)
+        loss = criterion(outputs, target_batch.contiguous().view(-1))
+        print('Epoch:', '%04d' % (epoch + 1), 'cost =', '{:.6f}'.format(loss))
+        loss.backward()
+        optimizer.step()
+
+    # Test
+    predict, _, _, _ = model(enc_inputs, dec_inputs)
+    predict = predict.data.max(1, keepdim=True)[1]
+    print(sentences[0], '->', [number_dict[n.item()] for n in predict.squeeze()])
+
+    print('first head of last state enc_self_attns')
+    show_graph(enc_self_attn)
+
+    print('first head of last state dec_self_attns')
+    show_graph(dec_self_attn)
+
+    print('first head of last state dec_enc_attns')
+    show_graph(dec_enc_attn)
