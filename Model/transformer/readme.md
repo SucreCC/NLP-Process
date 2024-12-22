@@ -1,7 +1,20 @@
 
-![img.png](Encoder-Self-Attention.png)
-![img_1.png](Decoder-Self-Attention.png)
-![img_2.png](Decoder-Encoder-Attention.png)
+
+
+
+
+
+
+
+
+
+# 版本
+- python 3.10
+- pytorch 2.5.1
+
+
+# 运行结果分析
+
 
 "ich mochte ein bier P"  --->  "i want a beer E"  但翻译结果是 ['i', 'a', 'a', 'beer', 'E']   
 要将预测结果 ['i', 'a', 'a', 'beer', 'E'] 与三个 Attention Scores 关联起来，需要分析以下内容：
@@ -11,8 +24,6 @@
 	•	颜色浅（接近黄色）：Attention 分数大，表示这个单词与目标单词的关系很强。
 	•	颜色深（接近紫色）：Attention 分数小，表示这个单词与目标单词的关系较弱或没有关系。
 
-
-颜色深浅表示 Attention 分数的大小，Attention 分数反映了一个单词对另一个单词的关注程度或重要性。下面我们一步步解释如何理解颜色深浅与 Attention 的关联关系。
 
 1. Attention 分数的含义
 
@@ -32,6 +43,7 @@
 3. 三张图中的颜色解释
 
 图 1：Encoder Self-Attention
+![encoder_attention.png](encoder_attention.png)
 
 	•	行和列都表示源句子 ["ich", "mochte", "ein", "bier", "P"]。
 	•	某个单元格颜色越浅（黄色），表示 Encoder 认为这两个单词之间的关联性越强。
@@ -39,14 +51,14 @@
 	•	如果某个单元格过于深紫色，说明模型认为这两个单词没有重要关系。
 
 图 2：Decoder Self-Attention
-
+![decoder_attention.png](decoder_attention.png)
 	•	行表示目标句子 ["i", "a", "a", "beer", "E"] 中的目标单词。
 	•	列表示目标句子中之前生成的单词。
 	•	黄色区域表示当前单词生成时对之前单词的高度依赖。
 	•	如果生成 a 时过于依赖另一个 a，说明 Attention 过度集中，导致重复生成。
 
 图 3：Decoder-Encoder Attention
-
+![decoder_encoder_attention.png](decoder_encoder_attention.png)
 	•	行表示目标句子 ["i", "a", "a", "beer", "E"]。
 	•	列表示源句子 ["ich", "mochte", "ein", "bier", "P"]。
 	•	黄色单元格表示目标单词对源句子某个单词的高度关注：
