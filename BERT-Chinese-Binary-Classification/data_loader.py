@@ -19,7 +19,7 @@ def get_balance_corpus(corpus):
     balanced_corpus = balanced_corpus.sample(frac=1, random_state=42).reset_index(drop=True)
     return balanced_corpus
 
-
+# 处理 如下数据集合 ../others/data/binary-classification/waimai-10k/waimai_10k.csv
 # def load_dataset(file_path, max_len, tokenizer):
 #     CLS_ids = tokenizer.convert_tokens_to_ids('[CLS]')  # 改为标准 BERT CLS 标记
 #     contents = []
@@ -51,6 +51,7 @@ def get_balance_corpus(corpus):
 #
 #     return contents
 
+# 处理数据集 ../others/data/THUCNews/binary_cls/train.txt
 # def build_dataset(config):
 #     def load_dataset(path, pad_size=32):
 #         contents = []
@@ -84,10 +85,8 @@ def get_balance_corpus(corpus):
 #     return train
 
 
-import pandas as pd
-from tqdm import tqdm
 
-
+# 处理数据集 ../others/data/THUCNews/binary_cls/goods.txt
 def load_dataset(file_path, pad_size=32, tokenizer=None):
     contents = []
 
