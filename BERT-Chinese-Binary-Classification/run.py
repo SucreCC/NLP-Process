@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from transformers import BertModel
 import model_config
-from data_loader import load_dataset, buildIterator, get_time_dif
+from data_loader import build_dataset, buildIterator, get_time_dif
 from model import Model
 from train import train
 
@@ -21,7 +21,8 @@ if __name__ == '__main__':
 
     start_time = time.time()
     print("Loading data...")
-    train_data = load_dataset(config.file_path, config.max_len, config.tokenizer)
+    # train_data = load_dataset(config.file_path, config.max_len, config.tokenizer)
+    train_data = build_dataset(config)
     train_iter =  buildIterator(train_data, config)
     time_dif = get_time_dif(start_time)
     print("Time usage:", time_dif)

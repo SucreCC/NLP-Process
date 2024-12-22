@@ -20,36 +20,124 @@ def get_balance_corpus(corpus):
     return balanced_corpus
 
 
-def load_dataset(file_path, max_len, tokenizer):
-    CLS_ids = tokenizer.convert_tokens_to_ids('[CLS]')  # 改为标准 BERT CLS 标记
+# def load_dataset(file_path, max_len, tokenizer):
+#     CLS_ids = tokenizer.convert_tokens_to_ids('[CLS]')  # 改为标准 BERT CLS 标记
+#     contents = []
+#
+#     # 读取数据
+#     corpus = pd.read_csv(file_path)
+#     balanced_corpus = get_balance_corpus(corpus)
+#     labels = [int(label) for label in balanced_corpus['label'].tolist()]
+#     inputs = balanced_corpus['review'].tolist()
+#
+#     for input_text, label in tqdm(zip(inputs, labels), total=len(labels)):
+#         # 分词
+#         encoding = tokenizer(input_text, add_special_tokens=False)
+#         input_ids = [CLS_ids] + encoding['input_ids']
+#         input_ids_len = len(input_ids)
+#
+#         # 截断或填充
+#         if input_ids_len < max_len:
+#             attention_mask = [1] * input_ids_len + [0] * (max_len - input_ids_len)
+#             input_ids += [0] * (max_len - input_ids_len)
+#             input_ids_len = max_len
+#         else:
+#             attention_mask = [1] * max_len
+#             input_ids = input_ids[:max_len]
+#             input_ids_len = max_len
+#
+#         # 打包单个样本
+#         contents.append((input_ids, label, input_ids_len, attention_mask))
+#
+#     return contents
+
+# def build_dataset(config):
+#     def load_dataset(path, pad_size=32):
+#         contents = []
+#         with open(path, 'r', encoding='UTF-8') as f:
+#             for line in tqdm(f):
+#                 lin = line.strip()
+#                 if not lin:
+#                     continue
+#                 content, label = line.split('\t')
+#                 token = config.tokenizer.tokenize(content)
+#                 token = [CLS] + token
+#                 seq_len = len(token)
+#                 mask = []
+#                 token_ids = config.tokenizer.convert_tokens_to_ids(token)
+#
+#                 if pad_size:
+#                     if len(token) < pad_size:
+#                         mask = [1] * len(token_ids) + [0] * (pad_size - len(token))
+#                         token_ids += ([0] * (pad_size - len(token)))
+#                     else:
+#                         mask = [1] * pad_size
+#                         token_ids = token_ids[:pad_size]
+#                         seq_len = pad_size
+#                 contents.append((token_ids, int(label), seq_len, mask))
+#         return contents
+#
+#     train = load_dataset(config.file_path, config.pad_size)
+#     # dev = load_dataset(dev_path, pad_size)
+#     # test = load_dataset(test_path, pad_size)
+#
+#     return train
+
+
+import pandas as pd
+from tqdm import tqdm
+
+
+def load_dataset(file_path, pad_size=32, tokenizer=None):
     contents = []
 
-    # 读取数据
-    corpus = pd.read_csv(file_path)
-    balanced_corpus = get_balance_corpus(corpus)
-    labels = [int(label) for label in balanced_corpus['label'].tolist()]
-    inputs = balanced_corpus['review'].tolist()
+    # 读取数据并清理
+    df = pd.read_csv(file_path)
+    df = df.dropna(axis=1, how='all')  # 删除所有值为 NaN 的列
+    df.columns = ['Review', 'Label']  # 设置列名
+    df = df.dropna(subset=['Review'])  # 删除含有缺失值的行
+    df = df.reset_index(drop=True)  # 重置索引
 
-    for input_text, label in tqdm(zip(inputs, labels), total=len(labels)):
-        # 分词
-        encoding = tokenizer(input_text, add_special_tokens=False)
-        input_ids = [CLS_ids] + encoding['input_ids']
-        input_ids_len = len(input_ids)
+    # 确认没有缺失值
+    if df['Review'].isnull().sum() > 0:
+        raise ValueError("数据中仍然存在缺失值！")
 
-        # 截断或填充
-        if input_ids_len < max_len:
-            attention_mask = [1] * input_ids_len + [0] * (max_len - input_ids_len)
-            input_ids += [0] * (max_len - input_ids_len)
-            input_ids_len = max_len
-        else:
-            attention_mask = [1] * max_len
-            input_ids = input_ids[:max_len]
-            input_ids_len = max_len
+    print("清理后缺失值数量:", df['Review'].isnull().sum())
 
-        # 打包单个样本
-        contents.append((input_ids, label, input_ids_len, attention_mask))
+    # 逐行处理数据
+    for _, row in tqdm(df.iterrows(), total=len(df)):
+        content = row['Review']
+        label = row['Label']
+
+        # 使用tokenizer将文本转化为token
+        tokens = tokenizer.tokenize(content) if tokenizer else content.split()
+
+        # 添加特殊标记CLS
+        tokens = ['[CLS]'] + tokens
+
+        # 处理token长度并填充
+        seq_len = len(tokens)
+        mask = []
+        token_ids = tokenizer.convert_tokens_to_ids(tokens) if tokenizer else tokens
+
+        # 处理padding
+        if pad_size:
+            if len(tokens) < pad_size:
+                mask = [1] * len(token_ids) + [0] * (pad_size - len(token_ids))
+                token_ids += [0] * (pad_size - len(token_ids))
+            else:
+                mask = [1] * pad_size
+                token_ids = token_ids[:pad_size]
+                seq_len = pad_size
+
+        # 保存处理后的数据
+        contents.append((token_ids, int(label), seq_len, mask))
 
     return contents
+
+
+def build_dataset(config):
+    return load_dataset(config.file_path, config.pad_size, config.tokenizer)
 
 
 class DataIterator(object):
