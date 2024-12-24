@@ -1,0 +1,1 @@
+在本文中，我们介绍了Python中的一个常见导入错误：ImportError: Attempted relative import with no known parent package。我们了解了这个错误的原因，以及解决这个错误的方法。当我们遇到这个错误时，需要确认导入的模块是否被正确地组织为一个package，可以尝试使用相对导入、绝对导入或者将模块添加到系统路径来解决这个错误。根据具体情况选择合适的方法，可以解决这个错误并正确导入需要的模块。
