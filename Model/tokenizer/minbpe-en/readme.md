@@ -14,6 +14,7 @@
 ## 1.4 RegexTokenizer
 - 定义了如何拆分复杂单词。
 - 可以处理特殊符号。
+
 ![img.png](img.png)[图片]
 # 2 重点代码
 ## 2.1 get_stats
