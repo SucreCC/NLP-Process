@@ -58,3 +58,7 @@ def merge(ids, pair, idx):
             i += 1
     return newids
 ```
+
+# 3 
+
+暂时无法处理中文
