@@ -215,3 +215,4 @@ cython_debug/
 /public/wandb/
 /public/logs/
 *.ckpt
+/practice/
