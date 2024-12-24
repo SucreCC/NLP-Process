@@ -15,7 +15,7 @@
 - 定义了如何拆分复杂单词。
 - 可以处理特殊符号。
 
-![img.png](img.png)[图片]
+![img.png](img.png)
 # 2 重点代码
 ## 2.1 get_stats
 - ids 是文本经过unicode转换后的生成的一个个的数字序列。
