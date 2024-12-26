@@ -8,20 +8,15 @@ import torch.nn.functional as F
 
 
 class LayerNorm(nn.Module):
+    """ LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False """
+
     def __init__(self, ndim, bias):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(ndim))
         self.bias = nn.Parameter(torch.zeros(ndim)) if bias else None
-        self.eps = 1e-6
 
-    def forward(self, x):
-        mean = x.mean(-1, keepdim=True)
-        std = x.std(-1, keepdim=True)
-        x = (x - mean) / torch.sqrt(std + self.eps)
-        if self.bias is not None:
-            return self.weight * x + self.bias
-        else:
-            return self.weight * x
+    def forward(self, input):
+        return F.layer_norm(input, self.weight.shape, self.weight, self.bias, 1e-5)
 
 
 class CausalSelfAttention(nn.Module):
@@ -39,7 +34,7 @@ class CausalSelfAttention(nn.Module):
         self.n_embd = config.n_embd
         self.dropout = config.dropout
         # flash attention,
-        self.flash = hasattr(torch.nn.functional, 'scaled_do_product_attention')
+        self.flash = hasattr(torch.nn.functional, 'scaled_dot_product_attention')
         if not self.flash:
             print("WARNING: using slow attention. Flash Attention requires PyTorch >= 2.0")
             # causal mask to ensure that attention is only applied to the left in the input sequence
@@ -76,7 +71,7 @@ class MLP(nn.Module):
         self.c_fc = nn.Linear(config.n_embd, 4 * config.n_embd, bias=config.bias)
         self.gelu = nn.GELU()
         self.c_proj = nn.Linear(4 * config.n_embd, config.n_embd, bias=config.bias)
-        self.dropout = nn.AlphaDropout(config.dropout)
+        self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, x):
         x = self.c_fc(x)
@@ -96,7 +91,7 @@ class Block(nn.Module):
 
     def forward(self, x):
         x = x + self.attn(self.ln_1(x))
-        x = x + self.ln_2(self.mlp(x))
+        x = x + self.mlp(self.ln_2(x))
         return x
 
 
@@ -140,7 +135,7 @@ class GPT(nn.Module):
     def get_num_parameters(self, non_embedding=True):
         n_params = sum(p.numel() for p in self.parameters())
         if non_embedding:
-            n_params -= self.transformer.wte.weight.numel()
+            n_params -= self.transformer.wpe.weight.numel()
         return n_params
 
     def _init_weights(self, module):
@@ -158,8 +153,8 @@ class GPT(nn.Module):
         # 确保输入序列的长度不超过配置中定义的最大序列长度
         assert seq_len <= self.config.seq_len, f"Cannot forward sequence of length {seq_len}, sequence length is only {self.config.seq_len}"
 
-        # 生成位置索引张量：[0, 1, 2, ..., batch_size-1]，并且它的类型为 long 类型
-        pos = torch.arange(0, batch_size, dtype=torch.long, device=device)
+        # 生成位置索引张量：[0, 1, 2, ..., seq_len-1]，并且它的类型为 long 类型
+        pos = torch.arange(0, seq_len, dtype=torch.long, device=device)
 
         # 获取词嵌入（词向量），通过词嵌入层 `wte` 将 ids 转换为对应的词向量
         tok_emb = self.transformer.wte(ids)
@@ -296,5 +291,5 @@ class GPT(nn.Module):
                 logits[logits < v[:, [-1]]] = -float('inf')
             probs = F.softmax(logits, dim=-1)
             idx_next = torch.multinomial(probs, num_samples=1)
-            idx = torch.cat([idx, idx_next], dim=1)
+            idx = torch.cat((idx, idx_next), dim=1)
         return idx
