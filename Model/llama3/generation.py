@@ -305,8 +305,8 @@ class DistributedShardedDataLoader:
 # int main
 
 def main(
-        ckpt_dir: str = "./Llama3.1-8B",
-        tokenizer_path: str = "./Llama3.1-8B/tokenizer.model",
+        ckpt_dir: str = "../../others/pretrain-model/llama/Llama3.1-8B",
+        tokenizer_path: str = "../../others/pretrain-model/llama/Llama3.1-8B/tokenizer.model",
         temperature: float = 1.0,
         top_p: float = 0.9,
         max_seq_len: int = 256,
