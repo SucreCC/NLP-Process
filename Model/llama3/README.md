@@ -1,3 +1,13 @@
+
+
+# 文件
+- config.py          llama3 配置文件
+- generation.py      
+- model.py           llama3 模型
+- test_llama31.py    用于测试
+- tiny_stories.py    下载tiny stories
+- tokenizer.py       llama3 tokenizer
+
 # 如何下载meta的预训练模型
 1. 去下面先填表格，选择模型
 https://www.llama.com/llama-downloads/
