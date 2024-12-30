@@ -7,6 +7,7 @@
 - test_llama31.py    用于测试
 - tiny_stories.py    下载tiny stories
 - tokenizer.py       llama3 tokenizer
+- chat.py  用于开始会话
 
 # 如何下载meta的预训练模型
 1. 去下面先填表格，选择模型
