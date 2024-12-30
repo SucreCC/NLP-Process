@@ -68,6 +68,7 @@ class Llama:
             print("Using CPU with default Float precision")
 
         model = Transformer(model_args)
+        # 用于加载模型参数， 如果只想用前三层的数据，可以在这里用 torch.load() 方法加载预训练模型，然后用for循环添加参数
         model.load_state_dict(checkpoint, strict=False)
         print(f"Loaded in {time.time() - start_time:.2f} seconds")
         return Llama(model, tokenizer)

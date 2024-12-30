@@ -2,12 +2,14 @@
 
 # 文件
 - config.py          llama3 配置文件
-- generation.py      
-- model.py           llama3 模型
-- test_llama31.py    用于测试
-- tiny_stories.py    下载tiny stories
 - tokenizer.py       llama3 tokenizer
-- chat.py  用于开始会话
+- model.py           llama3 模型
+- test_llama31.py    用于测试 （用于debug 查看代码）
+- chat.py  用于开始会话（游玩）
+- tiny_stories.py    下载tiny stories
+- generation.py      llama3 构造器，用于创建一个llama3
+
+
 
 # 如何下载meta的预训练模型
 1. 去下面先填表格，选择模型
