@@ -215,7 +215,7 @@ cython_debug/
 /public/wandb/
 /public/logs/
 *.ckpt
-/practice/
+/practice-llm/
 /others/pretrain-model/llama/Llama3.1-8B/checklist.chk
 /others/pretrain-model/llama/Llama3.1-8B/consolidated.00.pth
 /others/pretrain-model/llama/Llama3.1-8B/params.json
